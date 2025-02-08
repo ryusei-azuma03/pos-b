@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Azure MySQLのデータベースURLを環境変数から取得
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")  # デフォルトはSQLite
+DATABASE_URL = os.getenv("DB_URL", "sqlite:///./test.db")  # デフォルトはSQLite
 
 # Database setup
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
