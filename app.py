@@ -21,7 +21,7 @@ Base = declarative_base()
 
 # Database Models
 class Product(Base):
-    __tablename__ = "products"
+    __tablename__ = "m_product_azu"
 
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(13), unique=True, nullable=False)
@@ -29,7 +29,7 @@ class Product(Base):
     price = Column(Float, nullable=False)
 
 class Transaction(Base):
-    __tablename__ = "transactions"
+    __tablename__ = "m_transaction_azu"
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -37,11 +37,11 @@ class Transaction(Base):
     details = relationship("TransactionDetail", back_populates="transaction")
 
 class TransactionDetail(Base):
-    __tablename__ = "transaction_details"
+    __tablename__ = "m_transaction_detail_azu"
 
     id = Column(Integer, primary_key=True, index=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    transaction_id = Column(Integer, ForeignKey("m_transaction_azu.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("m_product_azu.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
     subtotal = Column(Float, nullable=False)
 
