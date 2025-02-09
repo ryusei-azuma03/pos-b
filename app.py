@@ -7,21 +7,51 @@ from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import tempfile
+import urllib.parse
 from dotenv import load_dotenv
 
 # 環境変数の読み込み
 load_dotenv()
 
-# Azure MySQLのデータベースURLを環境変数から取得
-DATABASE_URL = os.getenv("DB_URL", "sqlite:///./test.db")  # デフォルトはSQLite
-pem_content = os.getenv("SSL_CA_CERT")  # SSL証明書の取得
+# データベース接続情報
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = urllib.parse.quote_plus(os.getenv('DB_PASSWORD'))  # DBパスワードに@が入るとエラーとなるためエンコードする
+DB_HOST = os.getenv('DB_HOST')
+DB_PORT = os.getenv('DB_PORT')
+DB_NAME = os.getenv('DB_NAME')
 
-# SSL証明書を一時ファイルとして保存し、MySQL接続時に利用
-if "mysql" in DATABASE_URL and pem_content:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pem") as temp_pem:
-        temp_pem.write(pem_content.encode())
-        temp_pem_path = temp_pem.name
-    DATABASE_URL += f"?ssl_ca={temp_pem_path}"
+# MySQLのURL構築
+if not DB_USER or not DB_PASSWORD or not DB_HOST or not DB_PORT or not DB_NAME:
+    raise ValueError("環境変数が不足しています。.envファイルを確認してください。")
+
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+class AzureDBConnection:
+    def __init__(self):
+        self.database_url = DATABASE_URL
+        self.pem_content = os.getenv("SSL_CA_CERT")
+        self.engine = None
+        self.ssl_cert_path = None
+
+    def _save_ssl_cert(self):
+        if self.pem_content is None or self.pem_content.strip() == '':
+            raise ValueError("SSL_CA_CERT が環境変数に設定されていません。")
+
+        pem_content = self.pem_content.replace("\\n", "\n").replace("\r", "")
+
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".pem") as temp_pem:
+                temp_pem.write(pem_content)
+                self.ssl_cert_path = temp_pem.name
+                print(f"SSL証明書を保存: {self.ssl_cert_path}")
+                return self.ssl_cert_path
+        except Exception as e:
+            raise RuntimeError(f"SSL証明書の保存に失敗しました: {e}")
+
+# SSL証明書を設定し、データベースURLを更新
+azure_db = AzureDBConnection()
+ssl_cert_path = azure_db._save_ssl_cert()
+DATABASE_URL += f"?ssl_ca={ssl_cert_path}"
 
 # Database setup
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
@@ -31,7 +61,6 @@ Base = declarative_base()
 # Database Models
 class Product(Base):
     __tablename__ = "m_product_azu"
-
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(13), unique=True, nullable=False)
     name = Column(String(50), nullable=False)
@@ -39,7 +68,6 @@ class Product(Base):
 
 class Transaction(Base):
     __tablename__ = "m_transaction_azu"
-
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     total_amount = Column(Float, nullable=False)
@@ -47,13 +75,11 @@ class Transaction(Base):
 
 class TransactionDetail(Base):
     __tablename__ = "m_transaction_detail_azu"
-
     id = Column(Integer, primary_key=True, index=True)
     transaction_id = Column(Integer, ForeignKey("m_transaction_azu.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("m_product_azu.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
     subtotal = Column(Float, nullable=False)
-
     transaction = relationship("Transaction", back_populates="details")
     product = relationship("Product")
 
@@ -81,7 +107,6 @@ class ProductResponse(BaseModel):
     code: str
     name: str
     price: float
-
     class Config:
         from_attributes = True
 
@@ -93,10 +118,8 @@ class TransactionResponse(BaseModel):
     id: int
     timestamp: str
     total_amount: float
-
     class Config:
         from_attributes = True
-
     @classmethod
     def from_orm(cls, obj):
         return cls(
@@ -123,35 +146,28 @@ def search_product(request: ProductRequest, db: Session = Depends(get_db)):
 
 @app.get("/products/all", response_model=List[ProductResponse])
 def get_all_products(db: Session = Depends(get_db)):
-    """全商品を取得"""
     return db.query(Product).all()
 
 @app.post("/transactions", response_model=TransactionResponse)
 def create_transaction(request: TransactionRequest, db: Session = Depends(get_db)):
     if len(request.product_ids) != len(request.quantities):
         raise HTTPException(status_code=400, detail="Product IDs and quantities must match in length")
-
     total_amount = 0
     details = []
-
     for product_id, quantity in zip(request.product_ids, request.quantities):
         product = db.query(Product).filter(Product.id == product_id).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product ID {product_id} not found")
         subtotal = product.price * quantity
         total_amount += subtotal
-
         detail = TransactionDetail(product_id=product.id, quantity=quantity, subtotal=subtotal)
         details.append(detail)
-
     transaction = Transaction(total_amount=total_amount, details=details)
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
-
     return TransactionResponse.from_orm(transaction)
 
 @app.get("/transactions/all", response_model=List[TransactionResponse])
 def get_all_transactions(db: Session = Depends(get_db)):
-    """全取引履歴を取得"""
     return [TransactionResponse.from_orm(t) for t in db.query(Transaction).all()]
