@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker, relationship, declarative_base, Session
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import tempfile
 from dotenv import load_dotenv
 
 # 環境変数の読み込み
@@ -13,6 +14,14 @@ load_dotenv()
 
 # Azure MySQLのデータベースURLを環境変数から取得
 DATABASE_URL = os.getenv("DB_URL", "sqlite:///./test.db")  # デフォルトはSQLite
+pem_content = os.getenv("SSL_CA_CERT")  # SSL証明書の取得
+
+# SSL証明書を一時ファイルとして保存し、MySQL接続時に利用
+if "mysql" in DATABASE_URL and pem_content:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pem") as temp_pem:
+        temp_pem.write(pem_content.encode())
+        temp_pem_path = temp_pem.name
+    DATABASE_URL += f"?ssl_ca={temp_pem_path}"
 
 # Database setup
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
@@ -21,7 +30,7 @@ Base = declarative_base()
 
 # Database Models
 class Product(Base):
-    __tablename__ = "m_product_azu"  # Azure MySQL のテーブル名に修正
+    __tablename__ = "m_product_azu"
 
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(13), unique=True, nullable=False)
@@ -29,7 +38,7 @@ class Product(Base):
     price = Column(Float, nullable=False)
 
 class Transaction(Base):
-    __tablename__ = "m_transaction_azu"  # Azure MySQL のテーブル名に修正
+    __tablename__ = "m_transaction_azu"
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
@@ -37,11 +46,11 @@ class Transaction(Base):
     details = relationship("TransactionDetail", back_populates="transaction")
 
 class TransactionDetail(Base):
-    __tablename__ = "m_transaction_detail_azu"  # Azure MySQL のテーブル名に修正
+    __tablename__ = "m_transaction_detail_azu"
 
     id = Column(Integer, primary_key=True, index=True)
-    transaction_id = Column(Integer, ForeignKey("m_transaction_azu.id"), nullable=False)  # 修正
-    product_id = Column(Integer, ForeignKey("m_product_azu.id"), nullable=False)  # 修正
+    transaction_id = Column(Integer, ForeignKey("m_transaction_azu.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("m_product_azu.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
     subtotal = Column(Float, nullable=False)
 
@@ -54,7 +63,7 @@ Base.metadata.create_all(bind=engine)
 # FastAPI app setup
 app = FastAPI()
 
-# CORS 設定追加（フロントエンドを許可）
+# CORS 設定追加
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "https://tech0-gen8-step4-pos-app-67.azurewebsites.net"],
