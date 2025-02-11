@@ -36,7 +36,7 @@ class AzureDBConnection:
     def _save_ssl_cert(self):
         if self.pem_content is None or self.pem_content.strip() == '':
             raise ValueError("SSL_CA_CERT が環境変数に設定されていません。")
-        pem_content = self.pem_content.replace("\\n", "\n")
+        pem_content = self.pem_content.replace("\\n", "\n").replace("\\", "")
 
         try:
             with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".pem") as temp_pem:
