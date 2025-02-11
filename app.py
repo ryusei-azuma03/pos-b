@@ -29,31 +29,33 @@ DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB
 class AzureDBConnection:
     def __init__(self):
         self.database_url = DATABASE_URL
-        self.pem_content = os.getenv("SSL_CA_CERT")
+        self.pem_content = os.getenv("SSL_CA_CERT", "").replace("\\n", "\n")  # 修正①
         self.engine = None
         self.ssl_cert_path = None
 
     def _save_ssl_cert(self):
-        if self.pem_content is None or self.pem_content.strip() == '':
+        if not self.pem_content.strip():
             raise ValueError("SSL_CA_CERT が環境変数に設定されていません。")
-        pem_content = self.pem_content.replace("\\n", "\n").replace("\\", "")
 
         try:
             with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".pem") as temp_pem:
-                temp_pem.write(pem_content)
+                temp_pem.write(self.pem_content)
                 self.ssl_cert_path = temp_pem.name
                 print(f"SSL証明書を保存: {self.ssl_cert_path}")
                 return self.ssl_cert_path
         except Exception as e:
-            raise RuntimeError(f"SSL証明書の保存に失敗しました: {e}")
+            raise RuntimeError(f"SSL証明書の保存に失敗しました: {str(e)}")
 
-# SSL証明書を設定し、データベースURLを更新
+    def get_engine(self):
+        if self.engine is None:
+            ssl_cert_path = self._save_ssl_cert()
+            connect_args = {"ssl": {"ca": ssl_cert_path}}  # 修正②
+            self.engine = create_engine(self.database_url, connect_args=connect_args)  # 修正③
+        return self.engine
+
+# データベース接続
 azure_db = AzureDBConnection()
-ssl_cert_path = azure_db._save_ssl_cert()
-DATABASE_URL += f"?ssl_ca={ssl_cert_path}"
-
-# Database setup
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+engine = azure_db.get_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
