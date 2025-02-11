@@ -91,10 +91,10 @@ app = FastAPI()
 # CORS 設定追加
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://tech0-gen8-step4-pos-app-67.azurewebsites.net"],  # フロントエンドのURLを指定
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],  # 必要なメソッドのみ許可
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Pydantic Models
