@@ -1,15 +1,15 @@
 annotated-types==0.7.0
 anyio==4.8.0
+cryptography==42.0.5  # (最新安定版)
 fastapi==0.115.8
 greenlet==3.1.1
 idna==3.10
 pydantic==2.10.6
 pydantic_core==2.27.2
+PyMySQL==1.1.0
+python-dotenv==1.0.1  # (明示的にバージョンを指定)
 sniffio==1.3.1
 SQLAlchemy==2.0.37
 starlette==0.45.3
 typing_extensions==4.12.2
-python-dotenv
-PyMySQL==1.1.0
-cryptography
-uvicorn
+uvicorn==0.29.0  # (安定版)
